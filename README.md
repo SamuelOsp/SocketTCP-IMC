@@ -1,7 +1,6 @@
 # Sistema Distribuido Cliente-Servidor con Sockets TCP — Cálculo de IMC
 
 Autor: **Samuel David Ospina De Avila**
-Basado en la guía del docente John Carlos Arrieta Arrieta.
 
 ## Estructura
 
