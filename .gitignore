@@ -1,0 +1,16 @@
+# Compiled class files
+build/
+bin/
+*.class
+
+# NetBeans files
+**/nbproject/private/
+**/nbproject/Makefile-*.mk
+**/nbproject/Package-*.bash
+
+# macOS / OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
