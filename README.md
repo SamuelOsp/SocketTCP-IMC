@@ -15,7 +15,7 @@ GuiaSocketTCP-IMC/
 ├── ClienteTcpImc/src/johnarrieta/imc/cliente/
 │   ├── Principal.java                       (main del cliente)
 │   └── vistas/VentanaPrincipal.java         (GUI Swing del cliente)
-├── PasarelaWebImc/src/johnarrieta/imc/web/   (AÑADIDO — ver sección ngrok)
+├── PasarelaWebImc/src/johnarrieta/imc/web/   (AÑADIDO — anexo opcional)
 │   ├── PasarelaHttp.java                (servidor HTTP + página web)
 │   └── ClienteTcpGateway.java           (cliente TCP interno de la pasarela)
 └── ngrok.yml                            (definición de los dos túneles)
@@ -64,9 +64,9 @@ y apuntar la carpeta de fuentes a `ServidorTcpImc/src` (y otro proyecto para
 
 # Exponer la aplicación a Internet con ngrok
 
-Hasta aquí el sistema solo funciona en `localhost` o dentro de la misma red WiFi. Esta
-sección lo publica en Internet para que **cualquier persona, desde otro computador o
-desde el navegador de un celular**, pueda usarlo.
+Hasta aquí el sistema solo funciona en `localhost`. El objetivo de esta sección es que el
+**ClienteTcpImc corriendo en otro computador, en cualquier parte del mundo**, pueda
+escribir una dirección en su campo *DIRECCION IP* y conectarse a este servidor.
 
 ## 1. El problema: NAT
 
@@ -111,41 +111,27 @@ El protocolo de la guía es **binario**: `writeFloat`, `writeFloat`, `readFloat`
 contenido, así que la trama llega intacta. `ngrok http` esperaría peticiones HTTP y
 rompería la comunicación. **Para el servidor de la guía siempre se usa `tcp`.**
 
-## 3. El segundo problema: el navegador no habla TCP crudo
-
-El `ClienteTcpImc` es una aplicación **Swing**: no corre dentro de un navegador. Y un
-navegador solo sabe hablar HTTP/WebSocket, no puede abrir un socket TCP crudo. Por eso
-se añadió `PasarelaWebImc`, un **adaptador de protocolo** (patrón *gateway*):
-
-- Sirve una página web en `http://localhost:8080`.
-- Recibe `GET /imc?peso=81&altura=1.7`.
-- Por dentro abre `new Socket("localhost", 9007)` y habla **exactamente el mismo
-  protocolo binario** que el cliente Swing.
-- Devuelve `{"imc":28.027681,"mensaje":"Debes bajar un poco de peso"}`.
-
-**El `ServidorTcpImc` no se modificó en absoluto.** Para él, la pasarela es simplemente
-otro cliente TCP más, atendido por su propio `SubProcesoCliente`. La pasarela usa
-`com.sun.net.httpserver.HttpServer`, que viene incluido en el JDK: cero dependencias
-externas, cero Maven.
-
-## 4. Arquitectura resultante
+## 3. Arquitectura resultante
 
 ```
-  Navegador / celular  ──HTTPS──>  ngrok cloud  ──túnel──>  PasarelaHttp :8080
-  (cualquier parte)                                                 │
-                                                                    │ TCP binario
-                                                                    │ writeFloat/readUTF
-                                                                    v
-  ClienteTcpImc (Swing) ──TCP───>  ngrok cloud  ──túnel──>   ServidorTcp :9007
-  (otro PC)                                                   │
-                                                              └─ un SubProcesoCliente
-                                                                 (hilo) por conexión
+  ClienteTcpImc (Swing)          ngrok cloud            este computador
+  en otro computador       tcp://N.tcp.ngrok.io:PPPPP
+  ┌─────────────────┐            ┌──────────┐          ┌──────────────────┐
+  │ DIRECCION IP:   │──TCP──────>│ IP       │═════════>│ ServidorTcp :9007│
+  │  N.tcp.ngrok.io │            │ pública  │  túnel   │                  │
+  │ PUERTO: PPPPP   │<───────────│          │<═════════│ SubProcesoCliente│
+  └─────────────────┘            └──────────┘          │ (un hilo cada uno)│
+                                        ▲              └──────────────────┘
+                                        ║ conexión SALIENTE
+                                        ║ que abre el agente ngrok
+                                   (así se esquiva el NAT)
 ```
 
-Los dos caminos terminan en el mismo `ServidorTcp`, y como éste crea un hilo por
-conexión, ambos pueden estar activos **al mismo tiempo**.
+El cliente **no sabe** que hay un túnel de por medio: para él, `N.tcp.ngrok.io` es
+simplemente la dirección del servidor. Por eso no hubo que tocar ni una línea del código
+de la guía — solo se cambian los dos campos de la ventana de conexión.
 
-## 5. Instalación de ngrok
+## 4. Instalación y configuración de ngrok
 
 ```bash
 brew install ngrok
@@ -153,85 +139,108 @@ brew install ngrok
 ngrok config add-authtoken <TU_TOKEN_DEL_DASHBOARD>
 ```
 
-El authtoken queda guardado en
-`~/Library/Application Support/ngrok/ngrok.yml`, **fuera del repositorio**.
+El authtoken queda guardado en `~/Library/Application Support/ngrok/ngrok.yml`,
+**fuera del repositorio**.
 
-## 6. Compilar y ejecutar la pasarela web
+> **Los endpoints TCP exigen verificar una tarjeta** en
+> https://dashboard.ngrok.com/settings#id-verification. Sin ese paso, el túnel TCP falla
+> con `ERR_NGROK_8013`; ngrok indica que la tarjeta no se cobra, es solo antiabuso.
+
+## 5. Levantar el túnel TCP
+
+Con el `ServidorTcpImc` ya en **ONLINE**:
 
 ```bash
-cd PasarelaWebImc
+ngrok start imc-tcp \
+  --config "$HOME/Library/Application Support/ngrok/ngrok.yml" \
+  --config ./ngrok.yml
+```
+
+ngrok imprime la línea que contiene los dos datos que hacen falta:
+
+```
+Forwarding    tcp://6.tcp.ngrok.io:27008 -> localhost:9007
+```
+
+## 6. Conectar el cliente desde otro computador
+
+En el otro equipo basta con el proyecto del cliente:
+
+```bash
+git clone https://github.com/SamuelOsp/SocketTCP-IMC.git
+cd SocketTCP-IMC/ClienteTcpImc
 javac -d build $(find src -name "*.java")
-java -cp build johnarrieta.imc.web.PasarelaHttp
-# opcional: java -cp build johnarrieta.imc.web.PasarelaHttp <puertoWeb> <hostTcp> <puertoTcp>
+java -cp build johnarrieta.imc.cliente.Principal
 ```
 
-Por defecto: web en `8080`, servidor TCP en `localhost:9007`.
+En la ventana **CLIENTE IMC**, pestaña CONEXION:
 
-## 7. Levantar los túneles
+| Campo | Valor |
+|---|---|
+| DIRECCION IP | `6.tcp.ngrok.io` ← el host que dio ngrok |
+| PUERTO DE RED | `27008` ← el puerto que dio ngrok |
 
-### Opción A — solo el túnel web (sin tarjeta, funciona ya)
+**Conectar** → pestaña **CALCULAR IMC** → peso `81`, altura `1.7` → **CALCULAR**.
+El resultado (`28.03`) aparece en el cliente y la traza completa en el
+**LOG DE CONEXIONES** del servidor.
 
-```bash
-ngrok start imc-web \
-  --config "$HOME/Library/Application Support/ngrok/ngrok.yml" \
-  --config ./ngrok.yml
-```
+> ⚠️ El host y el puerto **cambian en cada reinicio de ngrok** — incluso el número del
+> subdominio (`0.tcp`, `6.tcp`, …). Hay que leerlos de la pantalla en el momento.
 
-Da una URL tipo `https://xxxx-xxxx-xxx.ngrok-free.dev`, que se abre desde **cualquier
-navegador del mundo**. El cliente Swing se demuestra entonces por **LAN**: en el otro
-equipo se pone la IP local de este Mac (`ipconfig getifaddr en0`) y el puerto `9007`.
-La arquitectura es idéntica; lo único que cambia es que el tramo TCP no sale a Internet.
+### En la misma red WiFi (sin túnel)
 
-### Opción B — los dos túneles (requiere verificar tarjeta)
+`new ServerSocket(9007)` escucha en **todas** las interfaces, así que dentro de la LAN
+no hace falta ngrok: se pone la IP local del servidor (`ipconfig getifaddr en0`, p. ej.
+`192.168.1.44`) y el puerto `9007`. Es la misma arquitectura, sin salir a Internet.
 
-```bash
-ngrok start --all \
-  --config "$HOME/Library/Application Support/ngrok/ngrok.yml" \
-  --config ./ngrok.yml
-```
+## 7. Seguridad
 
-Da además `tcp://0.tcp.ngrok.io:XXXXX`, que se pone en el **ClienteTcpImc** de Swing
-(IP = `0.tcp.ngrok.io`, PUERTO = `XXXXX`).
+Mientras el túnel esté arriba, **el servicio es público en Internet**: cualquiera con esa
+dirección puede conectarse. Hay que cerrar ngrok con `Ctrl-C` al terminar la
+demostración, y nunca subir el authtoken al repositorio.
 
-> **Importante — comprobado en este proyecto:** el plan gratuito de ngrok **no permite
-> endpoints TCP** hasta verificar una tarjeta en
-> https://dashboard.ngrok.com/settings#id-verification (error `ERR_NGROK_8013`; ngrok
-> indica que la tarjeta no se cobra, es solo antiabuso). Además, si el túnel TCP falla,
-> `ngrok start --all` **cierra la sesión completa** y tampoco levanta el web — por eso
-> existe la Opción A, que arranca únicamente `imc-web`.
-
-### Notas del plan gratuito
-
-- La dirección TCP y el subdominio **cambian cada vez que se reinicia ngrok**.
-- La URL HTTPS gratuita muestra una **página intersticial de advertencia** la primera
-  visita: basta pulsar *"Visit Site"*.
-- `http://localhost:4040` es el inspector de ngrok: muestra el tráfico en vivo. Muy útil
-  para el video.
-
-### Seguridad
-
-Mientras el túnel esté arriba, **el servicio es público en Internet**. Hay que cerrar
-ngrok con `Ctrl-C` al terminar la demostración, y nunca subir el authtoken al repo.
+`http://localhost:4040` es el inspector de ngrok, útil para ver el tráfico en vivo.
 
 ## 8. Cómo probarlo todo
 
 1. Arrancar el **ServidorTcpImc** → pestaña CONEXION, puerto `9007`, botón **INICIAR**
    (estado ONLINE).
-2. Arrancar la **PasarelaWebImc**.
-3. Local: abrir `http://localhost:8080`, peso `81`, altura `1.7` → IMC `28.03` y
-   "Debes bajar un poco de peso". Verificar la traza en **LOG DE CONEXIONES** del servidor.
-4. Por consola: `curl "http://localhost:8080/imc?peso=81&altura=1.7"`.
-5. Levantar los túneles.
-6. **Desde el celular con datos móviles** (no el WiFi de la casa, para demostrar que
-   realmente sale a Internet), abrir la URL `https://...ngrok-free.app` y calcular.
-7. Desde otro PC, abrir el **ClienteTcpImc**, poner `0.tcp.ngrok.io` y el puerto que dio
-   ngrok, **Conectar**, y calcular.
-8. Concurrencia: dejar el navegador y el cliente Swing conectados a la vez y calcular en
-   ambos; el log del servidor muestra las dos conexiones.
-9. Manejo de errores: detener el ServidorTcpImc y recargar la web → responde un error
-   controlado (`502`, "No hay conexión con el servidor TCP") en vez de colgarse.
+2. Local: arrancar el **ClienteTcpImc** con `localhost` : `9007` y calcular `81` / `1.7`
+   → `28.03`. Verificar la traza en LOG DE CONEXIONES.
+3. Levantar el túnel TCP y anotar host y puerto.
+4. Desde **otro computador**, abrir el ClienteTcpImc, poner el host y puerto de ngrok,
+   **Conectar** y calcular.
+5. Concurrencia: dejar dos clientes conectados a la vez y calcular en ambos; el log del
+   servidor muestra las dos conexiones con IPs distintas, cada una con su hilo.
 
-## 9. API de la pasarela
+---
+
+## Anexo: cliente web (opcional)
+
+El `ClienteTcpImc` es Swing y no corre en un navegador; un navegador tampoco puede abrir
+un socket TCP crudo. Como extra al ejercicio, `PasarelaWebImc` es un **adaptador de
+protocolo** (patrón *gateway*) que permite usar el sistema desde un navegador o un
+celular:
+
+- Sirve una página web en `http://localhost:8080` y recibe `GET /imc?peso=81&altura=1.7`.
+- Por dentro abre `new Socket("localhost", 9007)` y habla **el mismo protocolo binario**
+  que el cliente Swing.
+- Devuelve `{"imc":28.027681,"mensaje":"Debes bajar un poco de peso"}`.
+
+Para el `ServidorTcpImc` es simplemente otro cliente TCP más, atendido por su propio
+`SubProcesoCliente`; **el servidor no se modificó en absoluto**. Usa
+`com.sun.net.httpserver.HttpServer`, incluido en el JDK: cero dependencias externas.
+
+```bash
+cd PasarelaWebImc
+javac -d build $(find src -name "*.java")
+java -cp build johnarrieta.imc.web.PasarelaHttp
+# opcional: ... PasarelaHttp <puertoWeb> <hostTcp> <puertoTcp>
+```
+
+Para exponerla a Internet se usa el otro túnel, este sí HTTP:
+`ngrok start imc-web --config ... --config ./ngrok.yml`.
+Con `ngrok start --all` se levantan ambos túneles a la vez.
 
 | Método | Ruta | Respuesta |
 |---|---|---|
