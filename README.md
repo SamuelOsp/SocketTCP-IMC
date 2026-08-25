@@ -167,7 +167,22 @@ java -cp build johnarrieta.imc.web.PasarelaHttp
 
 Por defecto: web en `8080`, servidor TCP en `localhost:9007`.
 
-## 7. Levantar los dos túneles
+## 7. Levantar los túneles
+
+### Opción A — solo el túnel web (sin tarjeta, funciona ya)
+
+```bash
+ngrok start imc-web \
+  --config "$HOME/Library/Application Support/ngrok/ngrok.yml" \
+  --config ./ngrok.yml
+```
+
+Da una URL tipo `https://xxxx-xxxx-xxx.ngrok-free.dev`, que se abre desde **cualquier
+navegador del mundo**. El cliente Swing se demuestra entonces por **LAN**: en el otro
+equipo se pone la IP local de este Mac (`ipconfig getifaddr en0`) y el puerto `9007`.
+La arquitectura es idéntica; lo único que cambia es que el tramo TCP no sale a Internet.
+
+### Opción B — los dos túneles (requiere verificar tarjeta)
 
 ```bash
 ngrok start --all \
@@ -175,18 +190,19 @@ ngrok start --all \
   --config ./ngrok.yml
 ```
 
-ngrok imprime dos direcciones:
+Da además `tcp://0.tcp.ngrok.io:XXXXX`, que se pone en el **ClienteTcpImc** de Swing
+(IP = `0.tcp.ngrok.io`, PUERTO = `XXXXX`).
 
-- `tcp://0.tcp.ngrok.io:XXXXX` → se pone en el **ClienteTcpImc** de Swing
-  (IP = `0.tcp.ngrok.io`, PUERTO = `XXXXX`).
-- `https://xxxx.ngrok-free.app` → se abre en **cualquier navegador**.
+> **Importante — comprobado en este proyecto:** el plan gratuito de ngrok **no permite
+> endpoints TCP** hasta verificar una tarjeta en
+> https://dashboard.ngrok.com/settings#id-verification (error `ERR_NGROK_8013`; ngrok
+> indica que la tarjeta no se cobra, es solo antiabuso). Además, si el túnel TCP falla,
+> `ngrok start --all` **cierra la sesión completa** y tampoco levanta el web — por eso
+> existe la Opción A, que arranca únicamente `imc-web`.
 
 ### Notas del plan gratuito
 
 - La dirección TCP y el subdominio **cambian cada vez que se reinicia ngrok**.
-- El plan gratuito permite **una sola sesión de agente**; por eso los dos túneles se
-  levantan juntos con `ngrok start --all`. Si aun así lo rechaza, se corre un túnel a la
-  vez.
 - La URL HTTPS gratuita muestra una **página intersticial de advertencia** la primera
   visita: basta pulsar *"Visit Site"*.
 - `http://localhost:4040` es el inspector de ngrok: muestra el tráfico en vivo. Muy útil
