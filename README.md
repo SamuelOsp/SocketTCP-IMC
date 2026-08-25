@@ -2,6 +2,14 @@
 
 Autor: **Samuel David Ospina De Avila**
 
+## 🎥 Video demostrativo
+
+**▶ https://youtu.be/pFW5ZCa0N1A**
+
+Demostración del sistema funcionando entre dos computadores a través de Internet:
+la aplicación en local, el problema del NAT, el túnel inverso con ngrok, y el
+`ClienteTcpImc` conectándose desde otro equipo mediante la dirección pública del túnel.
+
 ## Estructura
 
 ```
