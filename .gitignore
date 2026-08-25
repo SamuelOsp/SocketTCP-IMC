@@ -8,6 +8,10 @@ bin/
 **/nbproject/Makefile-*.mk
 **/nbproject/Package-*.bash
 
+# ngrok (el authtoken es personal y NO debe subirse)
+ngrok.local.yml
+*.log
+
 # macOS / OS files
 .DS_Store
 .DS_Store?

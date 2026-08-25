@@ -1,0 +1,21 @@
+version: "3"
+
+# Configuracion de los dos tuneles del proyecto.
+# El authtoken NO va aqui: se guarda aparte con `ngrok config add-authtoken <TOKEN>`
+# (queda en ~/Library/Application Support/ngrok/ngrok.yml, fuera del repositorio).
+#
+# Levantar ambos tuneles:
+#   ngrok start --all --config "$HOME/Library/Application Support/ngrok/ngrok.yml" --config ./ngrok.yml
+
+tunnels:
+
+  # Tunel TCP crudo: expone el ServidorTcpImc para el ClienteTcpImc de Swing.
+  # Debe ser proto tcp (no http) porque el protocolo es binario writeFloat/writeUTF.
+  imc-tcp:
+    proto: tcp
+    addr: 9007
+
+  # Tunel HTTP: expone la PasarelaWebImc para navegadores y celulares.
+  imc-web:
+    proto: http
+    addr: 8080
